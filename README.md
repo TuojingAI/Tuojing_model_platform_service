@@ -172,7 +172,7 @@ systemctl --user stop tuojing-model-ui tuojing-model-api
 systemctl --user restart tuojing-model-api tuojing-model-ui
 ```
 
-前后端只监听 `127.0.0.1`，继续通过 SSH 端口转发访问。开发者模型目录必须允许 `model-platform` 读取；权限不足时页面会给出对应的 `setfacl` 命令。
+API 只监听 `127.0.0.1:8000`；UI 监听 `0.0.0.0:8501`，允许集群内部通过服务器地址访问。开发者模型目录必须允许 `model-platform` 读取；权限不足时页面会给出对应的 `setfacl` 命令。
 
 ## API
 
