@@ -10,6 +10,14 @@ set -Eeuo pipefail
 SOURCE_DIR="${MODEL_PLATFORM_SOURCE_DIR:-/data/jiaqimeng/projects/Tuojing_model_platform_service}"
 APP_DIR="${MODEL_PLATFORM_APP_DIR:-/data/model-platform/Tuojing_model_platform_service}"
 USER_UNIT_DIR="${HOME}/.config/systemd/user"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+
+[[ -S "${XDG_RUNTIME_DIR}/bus" ]] || {
+  echo "ERROR: user systemd bus is unavailable: ${XDG_RUNTIME_DIR}/bus" >&2
+  echo "Run 'loginctl enable-linger model-platform' once as root." >&2
+  exit 1
+}
 
 for command_name in install rsync sed systemctl; do
   command -v "${command_name}" >/dev/null 2>&1 || {
