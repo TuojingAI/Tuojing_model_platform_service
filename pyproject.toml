@@ -1,0 +1,30 @@
+[project]
+name = "tuojing-model-platform-service"
+version = "0.1.0"
+description = "Internal model release and metadata service"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "httpx>=0.27,<1",
+  "pydantic>=2.9,<3",
+  "streamlit>=1.40,<2",
+  "uvicorn[standard]>=0.30,<1",
+]
+
+[project.scripts]
+tuojing-model-api = "tuojing_model_platform_service.cli:api_main"
+tuojing-model-ui = "tuojing_model_platform_service.cli:ui_main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8,<10",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
