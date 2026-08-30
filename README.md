@@ -156,7 +156,7 @@ uv sync --frozen
 bash /data/jiaqimeng/projects/Tuojing_model_platform_service/deploy/deploy.sh
 ```
 
-脚本会确认开发目录位于干净的 `master`，并且 `HEAD` 与本地记录的 `origin/master` 一致；随后使用 rsync 将代码和 `.venv` 同步到 `/data/model-platform/Tuojing_model_platform_service`，修复虚拟环境中的绝对路径，安装用户级 systemd unit，并重启 API 和 UI。脚本不使用 sudo，也不会执行 `git pull`、创建用户或创建模型目录。
+脚本不执行任何 Git 操作。它直接使用 rsync 将代码和 `.venv` 同步到 `/data/model-platform/Tuojing_model_platform_service`，修复虚拟环境中的绝对路径，安装用户级 systemd unit，并重启 API 和 UI。由 `jiaqimeng` 负责确保源目录已经更新到正确版本。
 
 服务状态与日志：
 

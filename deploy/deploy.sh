@@ -10,40 +10,13 @@ set -Eeuo pipefail
 SOURCE_DIR="${MODEL_PLATFORM_SOURCE_DIR:-/data/jiaqimeng/projects/Tuojing_model_platform_service}"
 APP_DIR="${MODEL_PLATFORM_APP_DIR:-/data/model-platform/Tuojing_model_platform_service}"
 USER_UNIT_DIR="${HOME}/.config/systemd/user"
-EXPECTED_BRANCH="master"
 
-for command_name in git install rsync sed systemctl; do
+for command_name in install rsync sed systemctl; do
   command -v "${command_name}" >/dev/null 2>&1 || {
     echo "ERROR: required command not found: ${command_name}" >&2
     exit 1
   }
 done
-
-[[ -d "${SOURCE_DIR}/.git" ]] || {
-  echo "ERROR: source is not a Git repository: ${SOURCE_DIR}" >&2
-  exit 1
-}
-
-git_source=(git -c "safe.directory=${SOURCE_DIR}" -C "${SOURCE_DIR}")
-branch="$("${git_source[@]}" branch --show-current)"
-[[ "${branch}" == "${EXPECTED_BRANCH}" ]] || {
-  echo "ERROR: source branch must be ${EXPECTED_BRANCH}; current branch is ${branch}" >&2
-  exit 1
-}
-
-[[ -z "$("${git_source[@]}" status --porcelain)" ]] || {
-  echo "ERROR: source repository has uncommitted or untracked files" >&2
-  "${git_source[@]}" status --short >&2
-  exit 1
-}
-
-source_commit="$("${git_source[@]}" rev-parse HEAD)"
-origin_commit="$("${git_source[@]}" rev-parse --verify "origin/${EXPECTED_BRANCH}")"
-[[ "${source_commit}" == "${origin_commit}" ]] || {
-  echo "ERROR: local ${EXPECTED_BRANCH} does not match origin/${EXPECTED_BRANCH}" >&2
-  echo "Run git pull --ff-only origin ${EXPECTED_BRANCH} as jiaqimeng first." >&2
-  exit 1
-}
 
 [[ -x "${SOURCE_DIR}/.venv/bin/tuojing-model-api" ]] || {
   echo "ERROR: source virtual environment is missing the API command" >&2
@@ -99,4 +72,3 @@ systemctl --user restart tuojing-model-api.service
 systemctl --user restart tuojing-model-ui.service
 
 echo "MODEL_PLATFORM_DEPLOY=PASS"
-echo "SOURCE_COMMIT=${source_commit}"
