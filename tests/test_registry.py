@@ -20,7 +20,6 @@ def registry(tmp_path: Path) -> tuple[ModelRegistry, Path]:
     settings = Settings(
         meta_dir=tmp_path / "meta",
         release_dir=tmp_path / "release",
-        workspace_root=workspace,
     )
     return ModelRegistry(settings), workspace
 
@@ -97,7 +96,7 @@ def test_exact_version_conflict_and_force_replace(
     assert replaced.sha256 != original.sha256
 
 
-def test_source_must_be_below_workspace_and_match_model_name(
+def test_source_can_be_anywhere_but_must_match_model_name(
     registry: tuple[ModelRegistry, Path], tmp_path: Path
 ) -> None:
     service, workspace = registry
@@ -114,14 +113,14 @@ def test_source_must_be_below_workspace_and_match_model_name(
     outside = tmp_path / "outside" / "umi-policy"
     outside.mkdir(parents=True)
     (outside / "model.pt").write_text("weights", encoding="utf-8")
-    with pytest.raises(InvalidSourceError):
-        service.release(
-            ReleaseRequest(
-                project_name="Umi2Isaac",
-                model_name="umi-policy",
-                source_path=str(outside),
-            )
+    released = service.release(
+        ReleaseRequest(
+            project_name="Umi2Isaac",
+            model_name="umi-policy",
+            source_path=str(outside),
         )
+    )
+    assert released.version == "0.0.1"
 
 
 def test_source_dereferences_symlinks(registry: tuple[ModelRegistry, Path]) -> None:
@@ -146,7 +145,7 @@ def test_source_dereferences_symlinks(registry: tuple[ModelRegistry, Path]) -> N
     assert not published_link.is_symlink()
 
 
-def test_source_rejects_symlink_outside_workspace(
+def test_source_dereferences_symlink_to_any_readable_path(
     registry: tuple[ModelRegistry, Path], tmp_path: Path
 ) -> None:
     service, workspace = registry
@@ -155,14 +154,16 @@ def test_source_rejects_symlink_outside_workspace(
     outside.write_text("outside", encoding="utf-8")
     (source / "outside.pt").symlink_to(outside)
 
-    with pytest.raises(InvalidSourceError, match="stay below workspace root"):
-        service.release(
-            ReleaseRequest(
-                project_name="Umi2Isaac",
-                model_name="umi-policy",
-                source_path=str(source),
-            )
+    released = service.release(
+        ReleaseRequest(
+            project_name="Umi2Isaac",
+            model_name="umi-policy",
+            source_path=str(source),
         )
+    )
+    published = Path(released.model_uri) / "outside.pt"
+    assert published.read_text(encoding="utf-8") == "outside"
+    assert not published.is_symlink()
 
 
 def test_source_requires_absolute_existing_path(

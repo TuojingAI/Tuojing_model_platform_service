@@ -15,7 +15,7 @@
 - 接收模型目录；
 - 自动递增模型版本，也允许指定版本；
 - 计算 SHA-256 并生成 Metadata；
-- 发布到 `/data/model-registry/model_release`；
+- 发布到 `/data/model_registry/model_release`；
 - 维护最新模型索引和全部历史记录；
 - 查询模型路径、版本和元数据。
 
@@ -29,17 +29,17 @@ flowchart LR
     UI --> API[Model Registry API]
     API --> VERSION[计算目标版本]
     VERSION --> CHECK[校验与 SHA-256]
-    CHECK --> RELEASE[/data/model-registry/model_release]
-    CHECK --> META[/data/model-registry/model_meta]
+    CHECK --> RELEASE[/data/model_registry/model_release]
+    CHECK --> META[/data/model_registry/model_meta]
     API --> RESULT[version + model_uri + SHA-256]
 ```
 
 ## 4. 存储目录
 
-路径统一使用 `/data/model-registry`：
+路径统一使用 `/data/model_registry`：
 
 ```text
-/data/model-registry/
+/data/model_registry/
 ├── model_release/
 │   └── <project_name>/
 │       └── <model_name>/
@@ -74,7 +74,7 @@ flowchart LR
       "project_name": "Umi2Isaac",
       "model_name": "umi-policy",
       "version": "0.0.2",
-      "model_uri": "/data/model-registry/model_release/Umi2Isaac/umi-policy/0.0.2/",
+      "model_uri": "/data/model_registry/model_release/Umi2Isaac/umi-policy/0.0.2/",
       "sha256": "<full-sha256>",
       "released_by": "alice",
       "released_at": "2026-08-30T08:30:00Z"
@@ -95,7 +95,7 @@ flowchart LR
       "project_name": "Umi2Isaac",
       "model_name": "umi-policy",
       "version": "0.0.1",
-      "model_uri": "/data/model-registry/model_release/Umi2Isaac/umi-policy/0.0.1/",
+      "model_uri": "/data/model_registry/model_release/Umi2Isaac/umi-policy/0.0.1/",
       "sha256": "<full-sha256>",
       "released_by": "alice",
       "released_at": "2026-08-29T08:30:00Z"
@@ -113,7 +113,7 @@ flowchart LR
 MVP 中 `model_uri` 直接保存模型版本目录，并保留到版本层级：
 
 ```text
-/data/model-registry/model_release/Umi2Isaac/umi-policy/0.0.2/
+/data/model_registry/model_release/Umi2Isaac/umi-policy/0.0.2/
 ```
 
 目录中可以包含一个模型文件，也可以包含权重、配置、Tokenizer 等多个文件。业务代码根据自己的模型类型读取目录内容。
@@ -150,7 +150,7 @@ MVP 中 `model_uri` 直接保存模型版本目录，并保留到版本层级：
 {
   "project_name": "Umi2Isaac",
   "model_name": "umi-policy",
-  "source_path": "/data/workspace/umi-policy/",
+  "source_path": "/home/user/projects/umi-policy/",
   "version_strategy": "exact",
   "version": "1.2.3",
   "force_replace": true
@@ -196,7 +196,7 @@ sequenceDiagram
 {
   "project_name": "Umi2Isaac",
   "model_name": "umi-policy",
-  "source_path": "/data/workspace/umi-policy/",
+  "source_path": "/home/user/projects/umi-policy/",
   "released_by": "alice"
 }
 ```
@@ -207,7 +207,7 @@ sequenceDiagram
 {
   "project_name": "Umi2Isaac",
   "model_name": "umi-policy",
-  "source_path": "/data/workspace/umi-policy/",
+  "source_path": "/home/user/projects/umi-policy/",
   "released_by": "alice",
   "version_strategy": "minor"
 }
@@ -267,18 +267,18 @@ GET  /api/v1/health
 `source_path` 是开发者提供的模型目录路径，例如：
 
 ```text
-/data/workspace/umi-policy/
+/home/user/projects/umi-policy/
 ```
 
-路径必须是绝对路径并真实存在，目录最后一级名称必须与 `model_name` 相同。服务端必须能够访问这个路径。MVP 要求开发机器和服务共享 `/data`，并且只允许读取配置好的 `/data` 白名单目录。
+路径必须是绝对路径并真实存在，目录最后一级名称必须与 `model_name` 相同，服务端必须能够读取这个路径。应用不再设置额外路径白名单，访问边界由运行服务的 Linux 用户权限决定。
 
 服务处理方式：
 
 ```text
-校验 source_path 是绝对路径、真实目录且位于允许目录
+校验 source_path 是绝对路径和真实目录
 → 校验目录名等于 model_name
 → 校验服务用户拥有目录遍历和文件读取权限
-→ 校验软链接目标存在且仍在 workspace 内
+→ 校验软链接目标存在且可读
 → 解除软链接并将真实内容复制到目标版本的临时目录
 → 按相对路径排序并计算目录 SHA-256
 → 原子 rename 为正式版本目录
@@ -289,7 +289,7 @@ GET  /api/v1/health
 
 权限不足时返回 `403`，响应同时包含 `suggested_command`。命令使用 ACL 只给当前 API 服务用户增加目录遍历与只读权限；服务只生成建议，不自动修改开发者目录权限。
 
-源目录允许软链接，但目标必须真实存在、可读且仍位于配置的 workspace 内。复制时保存目标的真实内容，不在正式版本中保留软链接；失效链接、跨 workspace 链接和循环链接直接拒绝。
+源目录允许软链接，但目标必须真实存在且可读。复制时保存目标的真实内容，不在正式版本中保留软链接；失效链接和循环链接直接拒绝。
 
 ## 12. 与业务项目和 CI/CD 的关系
 
@@ -300,13 +300,13 @@ model:
   project_name: Umi2Isaac
   model_name: umi-policy
   version: 0.1.0
-  model_uri: /data/model-registry/model_release/Umi2Isaac/umi-policy/0.1.0/
+  model_uri: /data/model_registry/model_release/Umi2Isaac/umi-policy/0.1.0/
   sha256: <full-sha256>
 ```
 
 业务 Wheel 不携带模型文件，只提供加载和校验逻辑。模型平台发布模型，`Tuojing_platform_cicd` 发布业务代码 Wheel。
 
-GitHub-hosted CI 没有 `/data/model-registry`，因此只校验模型配置格式；真实模型加载测试留给开发机器或后续集群 Runner。
+GitHub-hosted CI 没有 `/data/model_registry`，因此只校验模型配置格式；真实模型加载测试留给开发机器或后续集群 Runner。
 
 ## 13. 并发、安全和恢复
 
@@ -325,7 +325,7 @@ GitHub-hosted CI 没有 `/data/model-registry`，因此只校验模型配置格�
 - [x] 实现 Streamlit 新增和查询页面；
 - [x] 实现默认 PATCH、MINOR、MAJOR 和指定版本规则；
 - [x] 实现 FastAPI 统一发版和查询接口；
-- [x] 实现 `source_path` 绝对路径、存在性、目录名、权限、软链接、白名单、复制、SHA-256 和目录发布；
+- [x] 实现 `source_path` 绝对路径、存在性、目录名、权限、软链接、复制、SHA-256 和目录发布；
 - [x] 实现 Metadata 文件锁和原子更新；
 - [x] 实现 `force_replace`；
 - [ ] 增加鉴权、备份和恢复测试；

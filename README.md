@@ -11,7 +11,7 @@
 - 默认自动递增 PATCH 版本；
 - 支持递增 MINOR、MAJOR 和指定版本；
 - 支持显式强制替换已有版本；
-- 限制模型来源必须位于共享 workspace；
+- 接受服务账号可读取的任意绝对路径；
 - 发版前检查路径和读取权限，权限不足时返回修复命令；
 - 记录可选发布人，并自动生成 UTC 发布时间；
 - 维护最新 Metadata 和历史 Metadata；
@@ -22,7 +22,7 @@
 - Linux；
 - Python 3.11 或更高版本；
 - [uv](https://docs.astral.sh/uv/)；
-- API 服务能够读写模型 workspace、发版目录和 Metadata 目录。
+- API 服务能够读取模型源目录，并写入发版目录和 Metadata 目录。
 
 安装锁定依赖：
 
@@ -34,29 +34,27 @@ uv sync --locked --all-groups
 
 | 用途 | 默认值 |
 |---|---|
-| 开发者模型根目录 | `/data/workspace` |
-| 模型发版目录 | `/data/model-registry/model_release` |
-| Metadata 目录 | `/data/model-registry/model_meta` |
+| 模型发版目录 | `/data/model_registry/model_release` |
+| Metadata 目录 | `/data/model_registry/model_meta` |
 
 `source_path` 必须满足：
 
 1. 是绝对路径，并且真实存在；
-2. 是 `/data/workspace` 下面的目录；
-3. 最后一级目录名与 `model_name` 相同；
-4. 至少包含一个文件；
-5. 软链接目标真实存在，并且仍位于配置的 workspace 内；
-6. API 服务用户能够遍历目录并读取全部文件及软链接目标。
+2. 最后一级目录名与 `model_name` 相同；
+3. 至少包含一个文件；
+4. 软链接目标真实存在；
+5. API 服务用户能够遍历目录并读取全部文件及软链接目标。
 
 例如：
 
 ```text
-/data/workspace/umi-policy/
+/home/user/projects/umi-policy/
 ├── model.pt
 ├── config.yaml
 └── tokenizer.json
 ```
 
-允许文件或目录软链接。平台发布时会解除软链接并复制目标的真实内容，因此发版目录不依赖原 workspace；失效链接、循环链接或指向 workspace 外的链接会被拒绝。
+允许文件或目录软链接。平台发布时会解除软链接并复制目标的真实内容；失效链接或循环链接会被拒绝。
 
 ## 启动 API
 
@@ -77,8 +75,7 @@ uv run tuojing-model-api \
   --port 8000 \
   --workers 2 \
   --meta-dir /data/custom/model_meta \
-  --release-dir /data/model-registry/model_release \
-  --workspace-root /data/workspace
+  --release-dir /data/model_registry/model_release
 ```
 
 参数：
@@ -88,16 +85,14 @@ uv run tuojing-model-api \
 | `--host` | `0.0.0.0` |
 | `--port` | `8000` |
 | `--workers` | `1` |
-| `--meta-dir` | `/data/model-registry/model_meta` |
-| `--release-dir` | `/data/model-registry/model_release` |
-| `--workspace-root` | `/data/workspace` |
+| `--meta-dir` | `/data/model_registry/model_meta` |
+| `--release-dir` | `/data/model_registry/model_release` |
 
 也可以使用环境变量：
 
 ```text
 MODEL_PLATFORM_META_DIR
 MODEL_PLATFORM_RELEASE_DIR
-MODEL_PLATFORM_WORKSPACE_ROOT
 ```
 
 API 文档地址：
@@ -125,6 +120,60 @@ http://<host>:8501
 
 Streamlit 只调用 FastAPI，不直接读写模型目录和 Metadata。
 
+## 生产部署
+
+生产环境使用预先创建的 `model-platform` 用户和 systemd 管理前后端。生产代码固定放在：
+
+```text
+/data/model-platform/Tuojing_model_platform_service
+```
+
+项目必须已经包含可运行的 `.venv`。systemd 直接使用其中的两个命令，不在生产启动时执行 `uv`：
+
+```text
+.venv/bin/tuojing-model-api
+.venv/bin/tuojing-model-ui
+```
+
+root 只需首次允许该用户在退出登录后继续运行用户级 systemd：
+
+```bash
+loginctl enable-linger model-platform
+```
+
+每次发布前，先由 `jiaqimeng` 更新开发目录：
+
+```bash
+cd /data/jiaqimeng/projects/Tuojing_model_platform_service
+git switch master
+git pull --ff-only origin master
+uv sync --frozen
+```
+
+然后由 `model-platform` 执行：
+
+```bash
+bash /data/jiaqimeng/projects/Tuojing_model_platform_service/deploy/deploy.sh
+```
+
+脚本会确认开发目录位于干净的 `master`，并且 `HEAD` 与本地记录的 `origin/master` 一致；随后使用 rsync 将代码和 `.venv` 同步到 `/data/model-platform/Tuojing_model_platform_service`，修复虚拟环境中的绝对路径，安装用户级 systemd unit，并重启 API 和 UI。脚本不使用 sudo，也不会执行 `git pull`、创建用户或创建模型目录。
+
+服务状态与日志：
+
+```bash
+systemctl --user status tuojing-model-api tuojing-model-ui
+journalctl --user -u tuojing-model-api -u tuojing-model-ui -f
+```
+
+停止和重新启动：
+
+```bash
+systemctl --user stop tuojing-model-ui tuojing-model-api
+systemctl --user restart tuojing-model-api tuojing-model-ui
+```
+
+前后端只监听 `127.0.0.1`，继续通过 SSH 端口转发访问。开发者模型目录必须允许 `model-platform` 读取；权限不足时页面会给出对应的 `setfacl` 命令。
+
 ## API
 
 ### 健康检查
@@ -133,7 +182,7 @@ Streamlit 只调用 FastAPI，不直接读写模型目录和 Metadata。
 curl http://127.0.0.1:8000/api/v1/health
 ```
 
-响应会显示服务实际使用的三个目录，可用于确认 `--meta-dir` 是否生效。
+响应会显示服务实际使用的 Metadata 和 Release 目录，可用于确认参数是否生效。
 
 ### 发版模型
 
@@ -145,7 +194,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/models/release \
   -d '{
     "project_name": "Umi2Isaac",
     "model_name": "umi-policy",
-    "source_path": "/data/workspace/umi-policy/",
+    "source_path": "/home/user/projects/umi-policy/",
     "released_by": "alice"
   }'
 ```
@@ -156,8 +205,8 @@ curl -X POST http://127.0.0.1:8000/api/v1/models/release \
 
 ```json
 {
-  "detail": "service user 'model-service' cannot read model source: /data/workspace/umi-policy",
-  "suggested_command": "sudo setfacl -m u:model-service:x -- /data/workspace && sudo setfacl -R -m u:model-service:rX -- /data/workspace/umi-policy"
+  "detail": "service user 'model-service' cannot read model source: /home/user/projects/umi-policy",
+  "suggested_command": "sudo setfacl -R -m u:model-service:rX -- /home/user/projects/umi-policy"
 }
 ```
 
@@ -210,7 +259,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/models/query \
 ## 发版结果
 
 ```text
-/data/model-registry/model_release/
+/data/model_registry/model_release/
 └── Umi2Isaac/
     └── umi-policy/
         └── 0.0.1/
@@ -222,7 +271,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/models/query \
 Metadata：
 
 ```text
-/data/model-registry/model_meta/
+/data/model_registry/model_meta/
 ├── model_meta.json
 └── model_meta_record.json
 ```

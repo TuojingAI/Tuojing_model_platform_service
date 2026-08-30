@@ -1,0 +1,18 @@
+[Unit]
+Description=Tuojing Model Platform UI
+Requires=tuojing-model-api.service
+After=tuojing-model-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=/data/model-platform/Tuojing_model_platform_service
+Environment=HOME=/data/model-platform
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/data/model-platform/Tuojing_model_platform_service/.venv/bin/tuojing-model-ui --host 127.0.0.1 --port 8501 --api-url http://127.0.0.1:8000
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGINT
+UMask=0027
+
+[Install]
+WantedBy=default.target

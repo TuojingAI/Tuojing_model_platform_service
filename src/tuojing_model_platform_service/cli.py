@@ -7,7 +7,7 @@ from pathlib import Path
 
 import uvicorn
 
-from .config import DEFAULT_META_DIR, DEFAULT_RELEASE_DIR, DEFAULT_WORKSPACE_ROOT
+from .config import DEFAULT_META_DIR, DEFAULT_RELEASE_DIR
 
 
 def api_main() -> None:
@@ -17,7 +17,6 @@ def api_main() -> None:
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--meta-dir", default=str(DEFAULT_META_DIR))
     parser.add_argument("--release-dir", default=str(DEFAULT_RELEASE_DIR))
-    parser.add_argument("--workspace-root", default=str(DEFAULT_WORKSPACE_ROOT))
     args = parser.parse_args()
 
     if args.workers < 1:
@@ -27,7 +26,6 @@ def api_main() -> None:
 
     os.environ["MODEL_PLATFORM_META_DIR"] = args.meta_dir
     os.environ["MODEL_PLATFORM_RELEASE_DIR"] = args.release_dir
-    os.environ["MODEL_PLATFORM_WORKSPACE_ROOT"] = args.workspace_root
 
     uvicorn.run(
         "tuojing_model_platform_service.api:create_app",

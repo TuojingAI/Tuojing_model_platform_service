@@ -23,7 +23,7 @@ class RegistryError(Exception):
 
 
 class InvalidSourceError(RegistryError):
-    """The supplied source directory violates the workspace contract."""
+    """The supplied source directory is invalid or cannot be published."""
 
 
 class CopyPermissionError(InvalidSourceError):
@@ -161,15 +161,6 @@ class ModelRegistry:
             raise InvalidSourceError("source_path must be an absolute path")
 
         try:
-            workspace = self.settings.workspace_root.resolve(strict=True)
-        except FileNotFoundError as error:
-            raise InvalidSourceError(
-                f"configured workspace root does not exist: {self.settings.workspace_root}"
-            ) from error
-        except PermissionError as error:
-            raise self._copy_permission_error(raw_source, error) from error
-
-        try:
             source = raw_source.resolve(strict=True)
         except FileNotFoundError as error:
             raise InvalidSourceError(f"source_path does not exist: {raw_source}") from error
@@ -178,21 +169,17 @@ class ModelRegistry:
 
         if not source.is_dir():
             raise InvalidSourceError("source_path must be a directory")
-        if not source.is_relative_to(workspace) or source == workspace:
-            raise InvalidSourceError(
-                f"source_path must be below workspace root: {workspace}"
-            )
         if raw_source.name != model_name:
             raise InvalidSourceError(
                 f"source directory name must equal model_name: {model_name}"
             )
 
-        has_file = self._assert_copy_permissions(source, workspace)
+        has_file = self._assert_copy_permissions(source)
         if not has_file:
             raise InvalidSourceError("source directory must contain at least one file")
         return source
 
-    def _assert_copy_permissions(self, source: Path, workspace: Path) -> bool:
+    def _assert_copy_permissions(self, source: Path) -> bool:
         has_file = False
         active_directories: set[Path] = set()
 
@@ -205,11 +192,6 @@ class ModelRegistry:
                 ) from error
             except PermissionError as error:
                 raise self._copy_permission_error(path, error) from error
-            if not target.is_relative_to(workspace):
-                raise InvalidSourceError(
-                    f"symbolic link target must stay below workspace root: {path} -> "
-                    f"{target}"
-                )
             return target
 
         def visit(directory: Path) -> None:
@@ -264,22 +246,25 @@ class ModelRegistry:
         self, source: Path, error: PermissionError | None = None
     ) -> CopyPermissionError:
         service_user = pwd.getpwuid(os.geteuid()).pw_name
-        workspace = Path(os.path.abspath(self.settings.workspace_root))
         source = Path(os.path.abspath(source))
+        ancestors: list[Path] = []
+        ancestor = source.parent
+        while ancestor != ancestor.parent:
+            ancestors.append(ancestor)
+            ancestor = ancestor.parent
 
-        ancestors: list[Path] = [workspace]
-        if source.is_relative_to(workspace):
-            relative_parent = source.parent.relative_to(workspace)
-            current = workspace
-            for part in relative_parent.parts:
-                current /= part
-                ancestors.append(current)
-
-        traverse_paths = " ".join(shlex.quote(str(path)) for path in ancestors)
-        suggested_command = (
-            f"sudo setfacl -m u:{service_user}:x -- {traverse_paths} && "
+        commands: list[str] = []
+        if ancestors:
+            traverse_paths = " ".join(
+                shlex.quote(str(path)) for path in reversed(ancestors)
+            )
+            commands.append(
+                f"sudo setfacl -m u:{service_user}:x -- {traverse_paths}"
+            )
+        commands.append(
             f"sudo setfacl -R -m u:{service_user}:rX -- {shlex.quote(str(source))}"
         )
+        suggested_command = " && ".join(commands)
         detail = f"service user {service_user!r} cannot read model source: {source}"
         if error is not None and error.filename:
             detail += f" ({error.filename})"

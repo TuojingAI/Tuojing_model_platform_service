@@ -42,7 +42,7 @@ with release_tab:
         project_name = st.text_input("项目名称")
         model_name = st.text_input("模型名称")
         source_path = st.text_input(
-            "模型目录", placeholder="/data/workspace/umi-policy/"
+            "模型目录", placeholder="/home/user/projects/umi-policy/"
         )
         released_by = st.text_input("发布人（可选）")
         version_strategy = st.selectbox(

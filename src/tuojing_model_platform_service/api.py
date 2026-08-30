@@ -58,7 +58,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "status": "ok",
             "meta_dir": str(resolved_settings.meta_dir),
             "release_dir": str(resolved_settings.release_dir),
-            "workspace_root": str(resolved_settings.workspace_root),
         }
 
     @app.post("/api/v1/models/release", response_model=ReleaseResponse)

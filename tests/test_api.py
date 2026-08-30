@@ -18,7 +18,6 @@ def test_release_query_and_health(tmp_path: Path) -> None:
         Settings(
             meta_dir=tmp_path / "custom-meta",
             release_dir=tmp_path / "release",
-            workspace_root=workspace,
         )
     )
     client = TestClient(app)
@@ -26,6 +25,7 @@ def test_release_query_and_health(tmp_path: Path) -> None:
     health = client.get("/api/v1/health")
     assert health.status_code == 200
     assert health.json()["meta_dir"] == str(tmp_path / "custom-meta")
+    assert "workspace_root" not in health.json()
 
     released = client.post(
         "/api/v1/models/release",
@@ -49,9 +49,7 @@ def test_release_query_and_health(tmp_path: Path) -> None:
     assert len(queried.json()["models"]) == 1
 
 
-def test_api_rejects_source_outside_workspace(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
+def test_api_accepts_source_from_any_absolute_path(tmp_path: Path) -> None:
     outside = tmp_path / "outside" / "umi-policy"
     outside.mkdir(parents=True)
     (outside / "model.pt").write_bytes(b"weights")
@@ -61,7 +59,6 @@ def test_api_rejects_source_outside_workspace(tmp_path: Path) -> None:
             Settings(
                 meta_dir=tmp_path / "meta",
                 release_dir=tmp_path / "release",
-                workspace_root=workspace,
             )
         )
     )
@@ -73,19 +70,16 @@ def test_api_rejects_source_outside_workspace(tmp_path: Path) -> None:
             "source_path": str(outside),
         },
     )
-    assert response.status_code == 400
+    assert response.status_code == 200
 
 
 def test_api_returns_permission_repair_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
     app = create_app(
         Settings(
             meta_dir=tmp_path / "meta",
             release_dir=tmp_path / "release",
-            workspace_root=workspace,
         )
     )
 
